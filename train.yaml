@@ -1,0 +1,83 @@
+# PIPELINE DEFINITION
+# Name: model-training-pipeline
+# Description: Train Segementation model
+components:
+  comp-train-model:
+    executorLabel: exec-train-model
+deploymentSpec:
+  executors:
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.4.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'albumentations==1.3.1'\
+          \ 'torch==2.1.1' 'segmentation-models-pytorch==0.3.3' 'torchmetrics==1.2.1'\
+          \ 'torchvision==0.16.1matplotlib==3.8.2' 'seaborn=0.13.0' 'numpy==1.21.0'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model():\n    import albumentations as A\n    import torch\n\
+          \    from torch.utils.data import DataLoader\n    from torch.utils.data\
+          \ import Dataset\n    import segmentation_models_pytorch as smp\n    import\
+          \ torchmetrics\n    import torchvision.transforms.functional as TF\n   \
+          \ import torch.nn.functional as F\n    import torch.nn as nn\n    from torch.optim\
+          \ import AdamW\n    import numpy as np\n    # import gdal\n    import matplotlib.pyplot\
+          \ as plt\n    import seaborn as sns\n\n    device = \"cuda\" if torch.cuda.is_available()\
+          \ else \"cpu\"\n    # Configuring the set of transformations\n    transforms\
+          \ = A.Compose([\n        A.OneOf([\n            A.HueSaturationValue(40,40,30,p=1),\n\
+          \            A.RandomBrightnessContrast(p=1,brightness_limit = 0.2,\n  \
+          \                                    contrast_limit = 0.5)], p = 0.5),\n\
+          \        A.OneOf([\n            A.RandomRotate90(p=1),\n            A.HorizontalFlip(p=1),\n\
+          \            A.RandomSizedCrop(min_max_height=(248,512),height=512,width=512,\
+          \ p =1)\n        ], p = 0.5)])\n    target_names = np.array([\"background\"\
+          , \"building\", \"woodland\", \"water\", \"road\"])\n\n    # Loss function\
+          \ - Mean IoU loss\n    loss_fn = smp.losses.JaccardLoss(mode = \"multiclass\"\
+          ,\n                                    classes = 5).to(device)\n\n    #\
+          \ Hyperparameters\n    batch_size = 8\n    epochs = 5\n    lr = 1e-3\n\n\
+          \    # Preparing datasets and DataLoaders\n    train_set = SegmentationDataset(mode\
+          \ = \"train\", transforms = transforms)\n    test_set = SegmentationDataset(mode\
+          \ = \"test\")\n    val_set = SegmentationDataset(mode = \"val\")\n\n   \
+          \ train_dloader = DataLoader(train_set, batch_size = batch_size, shuffle\
+          \ = True)\n    test_dloader = DataLoader(test_set, batch_size = batch_size)\n\
+          \    val_dloader = DataLoader(val_set, batch_size=batch_size)\n\n    model\
+          \ = UNet(in_channels = 3, out_channels = 5).to(device)\n    model.load_state_dict(torch.load('/content/drive/MyDrive/inputs/checkpoint.pth'))\n\
+          \    # Training starts!\n    train(model, train_dloader, val_dloader, epochs,\
+          \ lr, loss_fn, mod_epochs =1,regularization = \"L2\", reg_lambda = 1e-6,\
+          \ early_stopping = True,\n                patience = 4, save = True, stopping_criterion\
+          \ = \"loss\")\n    PATH = f'/content/drive/MyDrive/inputs/checkpoint.pth'\n\
+          \    torch.save(model.state_dict(), PATH)\n\n"
+        image: python:3.9.0
+pipelineInfo:
+  description: Train Segementation model
+  name: model-training-pipeline
+root:
+  dag:
+    tasks:
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        taskInfo:
+          name: train-model
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.4.0

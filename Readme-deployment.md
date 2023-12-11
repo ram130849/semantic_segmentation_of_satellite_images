@@ -1,0 +1,7 @@
+Streamlit App Development: the streamlit application consists of a single image and mask file upload and we can run the landcover_ai_mapping_notebook_streamlit.ipynb file to run the streamlit application run this line !streamlit run app.py &>/content/logs.txt  & npx localtunnel --port 8501 & curl ipv4.icanhazip.com to get the link popped up in the browser copy the ip address in the notebook and paste in the browser this will show the website. and also create a folder named test in the application to store the files. Change the appropriate directories whereever needed.
+
+
+Drift detection Code: Create a folder named test folder to store all the test image and mask files. I have used the cross entropy metric to create a drift detection code to find the concept drift difference from the training data and to monitor all the incoming data for any deviations
+from the training data distribution.
+
+DockerFile: this docker file is used to create a docker container by installing all of the requirements mentioned in the requirements.txt file and copy all the files from the streamlit application by exposing the url. then finally the application will run from the localhost:8501. We can build the docker package by this command: (docker build -t myapp .)  and run the image using this command: (docker run -d -it --expose 8501 -p 8501:8501 myapp:1.0)
